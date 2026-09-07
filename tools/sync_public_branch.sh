@@ -45,7 +45,12 @@ git rm --cached tools/redact_for_public.sh >/dev/null
 rm -f tools/redact_for_public.sh
 
 git add -A
-git commit -m "Redact real names/identifiers for public release (from master@${MASTER_SHA})"
+# public branch commits (dzhaobio) use a distinct identity from master
+# (tianping's repo-default git config) -- set explicitly here rather than
+# relying on whatever the local default happens to be.
+GIT_AUTHOR_NAME="Dejian Zhao" GIT_AUTHOR_EMAIL="dejian.zhao@yale.edu" \
+GIT_COMMITTER_NAME="Dejian Zhao" GIT_COMMITTER_EMAIL="dejian.zhao@yale.edu" \
+  git commit -m "Redact real names/identifiers for public release (from master@${MASTER_SHA})"
 
 git checkout master
 echo "public branch regenerated from master@${MASTER_SHA}."
