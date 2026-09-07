@@ -19,7 +19,12 @@ requires stopping to ask Dejian.
 ## Fixed reference points
 
 These paths/values are stable parts of Dejian's setup. Don't rediscover them
-each run, but do treat anything under "originals -- never edit" as read-only:
+each run, but do treat anything under "originals -- never edit" as read-only.
+
+This section mirrors `references/environment.md`, which is the source of
+truth (and has more deployment/portability detail) -- if the two ever
+disagree, or you're setting this skill up on a different HPC, trust
+`environment.md` and update this section to match.
 
 - Base work directory: `/gpfs/gibbs/pi/ycga/mane/dz288` -- the routine
   default; Step 1 may override this if the client's inputs specify a
@@ -93,9 +98,9 @@ blank/uncertain. This is the point where a wrong read of the client's
 intent is cheapest to catch and correct -- posting it lets Dejian spot a
 misread group, wrong species guess, etc. and intervene before any real
 directories, downloads, or compute jobs happen. Don't wait for explicit
-sign-off to continue (per Step-9's "don't pause for confirmation each time"
-principle) unless something is genuinely missing/ambiguous per the rule
-above -- just surface it, then keep going.
+sign-off to continue (per "When to stop and ask instead of proceeding" at
+the end of this file) unless something is genuinely missing/ambiguous per
+the rule above -- just surface it, then keep going.
 
 ## Step 2 -- Resolve the user subfolder
 
@@ -146,7 +151,10 @@ stated otherwise.
 ## Step 5 -- Determine the alignment `--ref` code
 
 Run `scripts/get_genome_ref.py /home/dz288/rms/rnaseq-HISAT2-RF_McCleary.rms
-"<species>"` with the species text from the client's inputs.
+"<species>"` with the species text from the client's inputs (canonical live
+path, per `references/environment.md`; fall back to
+`assets/rnaseq-HISAT2-RF_McCleary.rms` if it's not reachable, noting in the
+log that the bundled copy's genome list may be stale).
 
 - A confident single match -> use that ref code.
 - No match -> **don't build a reference genome yourself.** Create a
@@ -159,7 +167,11 @@ Run `scripts/get_genome_ref.py /home/dz288/rms/rnaseq-HISAT2-RF_McCleary.rms
 
 ## Step 6 -- Run the alignment (background, no tmux)
 
-Copy the pipeline before running it (never point `rms` at the original):
+Copy the pipeline before running it (never point `rms` at the original).
+Prefer the canonical live copy from `references/environment.md`; if it's
+not reachable (different HPC/account), fall back to this repo's
+`assets/rnaseq-HISAT2-RF_McCleary.rms` and note that in the Step 9 log --
+the bundled copy may be stale:
 ```
 cp /home/dz288/rms/rnaseq-HISAT2-RF_McCleary.rms ./rnaseq-HISAT2-RF_McCleary.rms
 ```
@@ -195,7 +207,11 @@ than redoing hours of alignment.
 
 Work inside the `DESeq2` folder created by alignment.
 
-Copy the R script before running it (never point Rscript at the original):
+Copy the R script before running it (never point Rscript at the original).
+Prefer the canonical live copy from `references/environment.md`; if it's
+not reachable, fall back to this repo's
+`assets/deseq2_one-factor_dynamic_slice_refit.R` and note that in the
+Step 9 log:
 ```
 cp ~/bin/deseq2_one-factor_dynamic_slice_refit.R ./deseq2_one-factor_dynamic_slice_refit.R
 ```

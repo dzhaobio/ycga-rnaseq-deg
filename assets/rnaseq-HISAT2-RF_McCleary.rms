@@ -1,0 +1,336 @@
+#!/usr/bin/env rms
+
+##python
+import sys
+import os.path
+import argparse
+
+genome = ""
+ref = "default"
+
+# Check the command-line arguments, and output the genome name and chromosome ordering.
+parser = argparse.ArgumentParser()
+parser.add_argument('--ref', type=str, required=True, help='Please, indicate the reference genome: hg19, hg38, mm10, mm39, rn6, Ncrassa, S288C, Chaetglob ')
+parser.add_argument('--sampleFile', type=str, required=True, help='FILE Usual RMS sample file')
+parser.add_argument('--unstranded', action='store_true', help='For unstranded libraries')
+parser.add_argument('--Trim3', type=int, default=7, help='Trim 5prime until this position')
+parser.add_argument('--MinLen', type=int, default=45, help='After trimming keep reads of at least this length')
+parser.add_argument('--TrimQS', type=int, default=20, help='Trim 3prime bases with QS lower than this')
+parser.add_argument('--ForceSE', action='store_true', help='Force to use only Read1, single-end')
+parser.add_argument('--NoBigWig', action='store_true', help='Create bedgraph and bigwig files')
+parser.add_argument('--MAPQ', type=int, default=10, help='MAPQ to select mapped reads. 10 for keeping only "uniquely" map')
+
+# this is just examples to grow argument list
+# parser.add_argument('-hg19', action='store_true', help='Use hg19 instead of hg38')
+# parser.add_argument('--sampleFolder', default="Samples", type=str, help='Length of the UMI barcode')
+args = parser.parse_args()
+
+genome={}
+
+genome['hg19']="/gpfs/gibbs/pi/ycga/mane.ycga/dz288/GenomeData/Homo_sapiens/UCSC/hg19/hg19rnaseq"
+genome['hg38v27']="/gpfs/gibbs/pi/ycga/mane.ycga/dz288/GenomeData/hg38/mc_hg38rnaseq"
+genome['hg38v43']="/gpfs/gibbs/pi/ycga/mane/ycga_bioinfo/config/hg38rnaseq_May2023"
+genome['hg38mmubglobin']="/gpfs/gibbs/pi/ycga/mane.ycga/dz288/GenomeData/hg38_mouseGlobin/mc_hg38mmubglobinrnaseq" # Qin Yan's RIP-seq
+genome['hg38mm10virus']="/gpfs/gibbs/pi/ycga/mane.ycga/dz288/GenomeData/hg38_mm10_virus/hg38mm10virusRnaseq" # covid19 hybridoma
+genome['hg38HPV16']="/gpfs/gibbs/pi/ycga/mane.ycga/dz288/GenomeData/hg38_HPV16/hg38_HPV16_rnaseq"
+
+genome['mm10']="/gpfs/gibbs/pi/ycga/mane/jk2269/knightlab/genomes/mm10/annotation/mm10rnaseq"
+genome['mm10_ZsGreen']="/gpfs/gibbs/pi/ycga/mane.ycga/dz288/GenomeData/mm10_ZsGreen/mm10_ZsGreen_rnaseq"
+genome['mm39vM35']="/gpfs/gibbs/pi/ycga/mane/ycga_bioinfo/genomes/mm39/annotation/mm39rnaseq"
+
+genome['S288C']="/gpfs/gibbs/pi/ycga/mane.ycga/dz288/GenomeData/Scerevisiae_S288C/S288Crnaseq"
+genome['S288C_CUTs_SUTs']="/gpfs/gibbs/pi/ycga/mane.ycga/dz288/GenomeData/Scerevisiae_S288C/S288Crnaseq_CUTs_SUTs"
+
+genome['rn6']="/gpfs/gibbs/pi/ycga/mane.ycga/dz288/GenomeData/Rattus_norvegicus/UCSC/rn6/annotation/rn6rnaseq"
+
+genome['dre']="/gpfs/gibbs/pi/ycga/mane.ycga/dz288/GenomeData/Danio_rerio_zebrafish/Ensembl/GRCz11_GCA_000002035.4/zebrafishGRCz11Rnaseq" #7/1/2021
+
+sys.stdout.write("##FullCommand=( %s )\n" % args)
+sys.stdout.write("##refver=( %s )\n" % genome[args.ref])
+sys.stdout.write("##unstranded=( %s )\n" % args.unstranded)
+sys.stdout.write("##Trim3=( %s )\n" % args.Trim3)
+sys.stdout.write("##MinLen=( %s )\n" % args.MinLen)
+sys.stdout.write("##TrimQS=( %s )\n" % args.TrimQS)
+sys.stdout.write("##sampleSetupFile=( %s )\n" % args.sampleFile)
+sys.stdout.write("##ForceSE=( %s )\n" % args.ForceSE)
+sys.stdout.write("##NoBigWig=( %s )\n" % args.NoBigWig)
+sys.stdout.write("##MAPQ=( %s )\n" % args.MAPQ)
+
+# reading sample file
+sampleFileContent=open(args.sampleFile)
+sys.stdout.write("##sheet=EOF\n")
+sys.stdout.write(sampleFileContent.read())
+sys.stdout.write("EOF\n")
+
+##env
+alias pbm="source /home/dz288/rms/pbm_Mar2018/pbmscript.sh"
+pbm rnautil
+source <refver>
+#source /home/dz288/rms/pbm/picard #McCleary # failed after Ruddle is decommissioned 7/28/23
+module load Java/1.8.345
+source /home/dz288/ycga_bioinfo/config/picard-2.18.29
+module purge
+# module load RSeQC #it needs to be loaded first to not produce errors
+module load Eigen/3.3.9-GCCcore-10.2.0
+module load R-bundle-Bioconductor/3.15-foss-2020b-R-4.2.0
+module load SAMtools/1.16-GCCcore-10.2.0 
+module load HISAT2/2.2.1-gompi-2020b 
+module load StringTie/2.1.4-GCCcore-10.2.0 
+module load BEDTools/2.30.0-GCCcore-10.2.0 
+module load HTSeq/0.13.5-foss-2020b-Python-3.8.6 
+module load Python/3.8.6-GCCcore-10.2.0 
+export RMSHOME="/home/dz288/rms"
+
+#### QP2Fastq sample <sample>/.QP2FQ.done
+# export PATH=/gpfs/gibbs/project/mane/dz288/opt/Quip/bin:$PATH
+module load Quip/20171217-GCCcore-10.2.0
+
+for file in <sample>/Unaligned/*fastq.qp
+do
+	if [ -f $file ]; then
+		quip -d -c $file | gzip > ${file/%.qp/.gz}
+		rm $file
+	fi
+done
+
+touch <sample>/.QP2FQ.done
+
+#### FastQC sample <sample>/.fastqc.done
+##ppn=2
+##mem=1
+module load FastQC/0.11.9-Java-11 
+mkdir -p "<sample>/FastQC" 
+fastqc -o "<sample>/FastQC"  -t <ppn> <sample>/Unaligned/*.fastq.gz 2>"<sample>/FastQC/FastQC.log"
+touch <sample>/.fastqc.done
+
+
+#### TrimReads sample <sample>/.trimming.done
+##after=QP2Fastq
+##ppn=4
+module load Trim_Galore/0.6.7-GCCcore-10.2.0 
+
+FQ=""
+cntFQ=0
+
+# prep FQ
+for R1 in <sample>/Unaligned/*_R1_*.fastq.gz
+do
+        cntFQ=$(($cntFQ+1))
+        R2=${R1/_R1_/_R2_}
+        if [ -e $R2 ]; then
+                FQ="$FQ $R1 $R2 "
+        else
+                FQ="$FQ $R1"
+        fi
+done
+echo "There are $cntFQ Fastq subfiles for <sample>"
+
+# trim reads
+if [ -e $R2 ]; then
+        echo "The sequencing is paired end"
+        echo "$FQ"
+        mkdir -p <sample>/Trimmed/fastqc
+        echo "Trimming reads using trim_galore"
+        trim_galore --phred33 --fastqc_args "--outdir <sample>/Trimmed/fastqc" -o "<sample>/Trimmed" --gzip --paired $FQ
+else
+        echo "The sequencing is single end"
+        echo "$FQ"
+        mkdir -p <sample>/Trimmed/fastqc
+        echo "Trimming reads using trim_galore"
+        trim_galore --phred33 --fastqc_args "--outdir <sample>/Trimmed/fastqc" -o "<sample>/Trimmed" --gzip $FQ
+fi
+
+# rename/merge Trimmed reads
+if [ $cntFQ == 1 ]; then
+        if [ -e $R2 ]; then
+                mv <sample>/Trimmed/*_R1_*fq.gz <sample>/<sample>_R1.trimmed.fastq.gz
+                mv <sample>/Trimmed/*_R2_*fq.gz <sample>/<sample>_R2.trimmed.fastq.gz
+        else
+                mv <sample>/Trimmed/*_R1_*fq.gz <sample>/<sample>_R1.trimmed.fastq.gz
+        fi
+else
+        if [ -e $R2 ]; then
+                zcat <sample>/Trimmed/*_R1_*fq.gz | gzip > <sample>/<sample>_R1.trimmed.fastq.gz
+                zcat <sample>/Trimmed/*_R2_*fq.gz | gzip > <sample>/<sample>_R2.trimmed.fastq.gz
+        else
+                zcat <sample>/Trimmed/*_R1_*fq.gz | gzip > <sample>/<sample>_R1.trimmed.fastq.gz
+        fi
+fi
+
+# set flag
+touch <sample>/.trimming.done
+rm -rf <sample>/Trimmed/*fq.gz
+
+
+
+
+
+
+#### HISAT2 sample <sample>/.completed.hisat2
+##ppn=10
+
+SEstrand=""
+PEstrand=""
+if [ <unstranded> == "False" ]
+then
+    SEstrand="--rna-strandness R"
+    PEstrand="--rna-strandness RF"
+fi
+
+MAPQ=""
+if [ "<MAPQ>" != "0" ]
+then
+    MAPQ="-q <MAPQ>"
+fi
+
+cd <sample>
+R1="<sample>_R1.trimmed.fastq.gz"
+R2="<sample>_R2.trimmed.fastq.gz"
+if [ -f $R2 ]; then
+    touch SeqType__PE
+    hisat2 -p <ppn> -t --dta -x $REF $PEstrand -1 $R1 -2 $R2 --summary-file hisat2_summary.txt | samtools view -hb -@ <ppn> $MAPQ - > aligned.out.bam
+else
+    touch SeqType__SE
+    hisat2 -p <ppn> -t --dta -x $REF $SEstrand -U $R1 --summary-file hisat2_summary.txt | samtools view -hb -@ <ppn> $MAPQ - > aligned.out.bam
+fi
+
+samtools sort -@ <ppn> -m 2G -T <tmp>/samsort aligned.out.bam ><sample>.MAPQ<MAPQ>.hisat2.bam
+samtools index -@ <ppn> <sample>.MAPQ<MAPQ>.hisat2.bam
+rm aligned.out.bam
+
+touch .completed.hisat2
+cd ..
+echo "<refver> <FullCommand> $R1 $R2 <ForceSE>" >>Param_used.txt
+
+
+#### picard sample <sample>/picard_quality_yield_metrics.txt
+##io=6
+cd <sample>
+picard CollectInsertSizeMetrics I=<sample>.MAPQ<MAPQ>.hisat2.bam O=picard_InsertSizeMetrics.txt H=insert_size_histogram.pdf
+picard CollectQualityYieldMetrics I=<sample>.MAPQ<MAPQ>.hisat2.bam O=picard_quality_yield_metrics.txt
+cd ..
+
+#### BigWig sample <sample>/.BigWig.done
+
+# I am seperatig this step cos we don't use it that often and it is slow.
+if [ <NoBigWig> == 'True' ]
+then
+exit 0
+fi
+
+samtools view -H <sample>/<sample>.MAPQ<MAPQ>.hisat2.bam | awk '$1~/^@SQ/{print substr($2, 4)"\t"substr($3, 4)}' > <sample>/<sample>.genomeSizes.txt
+perl $RMSHOME/rnaseq_utils/get_bigwig_scale_factor_from_hisat2_summary.pl <sample>/hisat2_summary.txt > <sample>/scale.factor.bigwig
+read -r scaleFactor < <sample>/scale.factor.bigwig
+genomeCoverageBed -scale $scaleFactor -split -bg -ibam <sample>/<sample>.MAPQ<MAPQ>.hisat2.bam -g <sample>/<sample>.genomeSizes.txt > <sample>/<sample>.10M.bedgraph
+
+# I need to fix wigToBigWig: issue with overlapping  in the bw file.
+# We may also consider to remove them, including bedgraph They are quite slow.
+/gpfs/ycga/home/jfl27/soft/wigToBigWig <sample>/<sample>.10M.bedgraph <sample>/<sample>.genomeSizes.txt <sample>/<sample>.10M.bw
+touch <sample>/.BigWig.done
+
+
+# #### PhenoFile all ballgown/phenodata.csv
+# mkdir -p ballgown
+# awk  -F "\t" '{print "\"" $1 "\""  "," "\""  $2 "\"" }' sample_setup.txt >DESeq2/phenodata.csv
+
+#### StringTie_Ballgown sample ballgown/<sample>/.completed.StringTie
+##ppn=10
+stringtie -e -B -p <ppn> -G $GTF -o ballgown/<sample>/<sample>.ballgown.gtf -A <sample>/gene_abund.tab <sample>/<sample>.MAPQ<MAPQ>.hisat2.bam
+touch ballgown/<sample>/.completed.StringTie
+
+
+#### StringTie_DESeq2 all DESeq2/gene_count_matrix.csv
+##ppn=10
+module purge
+module load Python/2.7.18-GCCcore-10.2.0
+mkdir -p DESeq2
+LENGTH=`awk 'NR==8{print $3}' */picard_quality_yield_metrics.txt`
+echo "python2 /gpfs/ycga/home/jfl27/soft/python_utils/prepDE.py -i ballgown/ -g DESeq2/gene_count_matrix.csv -t DESeq2/transcript_count_matrix.csv -l $LENGTH"
+#python2 /gpfs/ycga/home/jfl27/soft/python_utils/prepDE.py -i ballgown/ -g DESeq2/gene_count_matrix.csv -t DESeq2/transcript_count_matrix.csv -l $LENGTH
+python2 /vast/palmer/home.mccleary/dz288/rms/rnaseq_utils/prepDE.py -i ballgown/ -g DESeq2/gene_count_matrix.csv -t DESeq2/transcript_count_matrix.csv -l $LENGTH
+
+# #### StringTie sample <sample>/.completed.StringTie2
+# ##ppn=10
+# stringtie -p <ppn> -G $GTF -o <sample>/raw_stringtie.gtf <sample>/<sample>.MAPQ<MAPQ>.hisat2.bam
+# touch <sample>/.completed.StringTie2
+# 
+# 
+# #### StringMerge all stringtie_transcripts.gtf
+# ##ppn=10
+# stringtie --merge -p <ppn> -G $GTF -o stringtie_transcripts.gtf <sample,glob=True>/raw_stringtie.gtf
+# 
+# #### StringTie2 sample <sample>/.completed.StringTie3
+# ##ppn=10
+# mkdir -p ballgown/<sample>
+# mkdir -p DESeq2
+# stringtie -p <ppn> -e -B -G stringtie_transcripts.gtf -A <sample>/gene_abund_discoveryMode.tab -o ballgown_discovery/<sample>/<sample>.gtf <sample>/<sample>.MAPQ<MAPQ>.hisat2.bam
+# touch <sample>/.completed.StringTie3
+# 
+# 
+# #### StringTie_Discovery all DESeq2/gene_count_matrix_discoveryMode.csv
+# ##ppn=10
+# LENGTH=`awk 'NR==8{print $3}' */picard_quality_yield_metrics.txt`
+# echo "python /home/jfl27/soft/python_utils/prepDE.py -i ballgown/ -g DESeq2/gene_count_matrix_discoveryMode.csv -t DESeq2/transcript_count_matrix_discoveryMode.csv -l $LENGTH"
+# python /home/jfl27/soft/python_utils/prepDE.py -i ballgown_discovery/ -g DESeq2/gene_count_matrix_discoveryMode.csv -t DESeq2/transcript_count_matrix_discoveryMode.csv -l $LENGTH
+# 
+# #### StringTie_DESeq2_newer all -
+# ##ppn=10
+# LENGTH=`awk 'NR==8{print $3}' */picard_quality_yield_metrics.txt`
+# prepDE.py -i ballgown/ -g DESeq2/raw_gene_count_matrix.csv -t DESeq2/raw_transcript_count_matrix.csv -l $LENGTH
+# gene_rename.py DESeq2/raw_gene_count_matrix.csv stringtie_transcripts.gtf > DESeq2/gene_count_matrix.txt
+# transcript_rename.py DESeq2/raw_transcript_count_matrix.csv > DESeq2/transcript_count_matrix.txt
+
+#### Picard2 sample <sample>/picard_metrics.txt
+cd <sample>
+[[ "<unstranded>" = "True" ]] && STRAND='NONE' || STRAND='SECOND_READ_TRANSCRIPTION_STRAND'
+picard CollectRnaSeqMetrics I=<sample>.MAPQ<MAPQ>.hisat2.bam O=picard_metrics.txt REF_FLAT=$REF_FLAT \
+    STRAND_SPECIFICITY="SECOND_READ_TRANSCRIPTION_STRAND" RIBOSOMAL_INTERVALS=$RRNA_INTERVALS
+cd ..
+
+#### compilingStats sample  <sample>/rnaseqMetrics.txt 
+# python /home/jk2269/project/Halaban/scripts/rnaseq_stats.py <sample> > <sample>/rnaseqMetrics.txt 
+# python /home/jfl27/soft/python_utils/rnaseq_stats.py <sample> > <sample>/rnaseqMetrics.txt 
+python ${RMSHOME}/rnaseq_utils/rnaseq_stats.py <sample> > <sample>/rnaseqMetrics.txt 
+
+#### mergeStats all rnaseq_metrics.txt
+python /gpfs/gibbs/pi/ycga/mane/jk2269/Halaban/scripts/colstats_merge.py <sample,glob=True>/rnaseqMetrics* > rnaseq_metrics.txt
+
+
+
+#### collectRNAseqResults all Reports/RNAseqHisat2.tar.gz
+##ppn=1
+##mem=1
+RESULT1="Reports/RNAseqHisat2"
+if [ ! -e $RESULT1 ]; then
+	mkdir -p $RESULT1
+fi
+rsync -a rnaseq_metrics.txt DESeq2/gene_count_matrix.csv $RESULT1
+# tar -czvf ${RESULT1}.tar.gz $RESULT1 && rm -rf $RESULT1
+
+
+RESULT2="Reports/FastQC"
+if [ ! -e $RESULT2 ]; then
+	mkdir -p $RESULT2
+fi
+rsync -a <sample,glob=True>/FastQC/*.html $RESULT2
+# tar -czvf ${RESULT2}.tar.gz $RESULT2 && rm -rf $RESULT2
+
+#### sendEmail all .sendEmail.done
+CC="dejian.zhao@yale.edu"
+
+user_name=$(whoami)
+date_finished=$(date)
+# prep email
+email="
+The RNAseq job is done.
+Username: $user_name
+Date: $date_finished
+WorkDir:
+$PWD
+"
+
+# send email
+echo "$email" | mail -s "rnaseq-HISAT2 - done" -S "from=Dejian Zhao<dejian.zhao@yale.edu>" -c $CC $CC
+
+touch .sendEmail.done
+

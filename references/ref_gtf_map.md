@@ -5,7 +5,9 @@ schemes for the same genome**, so the alignment ref code is not always a
 valid GTFinfo key:
 
 - Alignment ref codes: `genome[...]` in `/home/dz288/rms/rnaseq-HISAT2-RF_McCleary.rms`
-  (read with `scripts/get_genome_ref.py`)
+  (read with `scripts/get_genome_ref.py`; canonical path per
+  `references/environment.md`, `assets/rnaseq-HISAT2-RF_McCleary.rms` as
+  fallback)
 - DEG GTFinfo keys: `gtf_dict` in Dejian's copy of
   `~/bin/deseq2_one-factor_dynamic_slice_refit.R` (see that file's
   "1. DEFINE GTF DICTIONARY" section for the current list)
