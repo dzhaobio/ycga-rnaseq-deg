@@ -1,6 +1,6 @@
 ---
 name: ycga-rnaseq-deg
-description: Run Dejian Zhao's YCGA bulk RNA-seq alignment + DESeq2 DEG service end-to-end on McCleary -- from a client's intake email/form reply through alignment, DEG analysis, results-sharing, and notification. Use whenever Dejian provides new RNA-seq client inputs (an email, pasted form reply, or YCGA data-link message, often with an Excel sample sheet) and wants the routine analysis pipeline run instead of doing each step by hand. Also use to resume/continue a project that's partway through this pipeline.
+description: Run Dejian Zhao's YCGA bulk RNA-seq alignment + DESeq2 DEG service end-to-end on McCleary -- from a client's intake email/form reply through alignment, DEG analysis, results-sharing, and notification. Use whenever Dejian provides new RNA-seq client inputs (an email, pasted form reply, or YCGA data-link message, often with an Excel sample sheet) and wants the routine analysis pipeline run instead of doing each step by hand. Also use to resume/continue a project that's partway through this pipeline, or to add/redo a DEG comparison for a project that's already been through it (e.g. "add a HET vs HOM comparison to the xpo7 project", "redo the HOM vs WT comparison excluding sample X") -- this works from any session, since project state lives on disk, not in conversation history.
 ---
 
 # YCGA bulk RNA-seq alignment + DEG pipeline
@@ -241,6 +241,52 @@ srun --mem=50G -p ycga --time=2-00:00:00 --cpus-per-task=16 bash -c \
 This produces `DESeq2_output/` (for sharing) plus QC plots one level up, per
 the R script's own layout -- see the script's "3. DIRECTORY STRUCTURE SETUP"
 section if the layout ever changes.
+
+## Amending an existing project (add or redo a comparison)
+
+Triggers on requests like "add a HET vs HOM comparison to the xpo7
+project" or "redo the HOM vs WT comparison" for a project that's already
+been through Steps 1-9 at least once. No alignment re-run needed here --
+`gene_count_matrix.csv` doesn't change just because you want a different
+slice of the same samples compared. This can run from any session, not
+just the one that did the original run: everything needed lives in the
+project directory on disk, not in conversation history.
+
+1. **Identify the project.** If it's not already unambiguous from context,
+   resolve it the same way as Steps 2-3 (user/PI subfolder, then the
+   project directory under it) rather than guessing.
+2. **Read what's already there** before building any flags:
+   - `run_log.txt` in the project directory for the `--ref`/GTFinfo key and
+     the exact `-s`/`--sampleGroups` string used originally.
+   - Existing subfolders under `DESeq2/DESeq2_output/` (e.g. `HET_vs_WT/`,
+     `HOM_vs_WT/`) tell you which comparisons already exist -- don't
+     re-list one of these in `-c` unless the client actually wants it
+     redone (e.g. after excluding an outlier sample), since the script has
+     no idempotency check and will silently overwrite that subfolder's
+     output if you do.
+3. **Build the command** the same way as Step 7, from inside the existing
+   `DESeq2/` folder (reuse the copy of the R script already there -- no
+   need to re-copy unless you specifically want to refresh it):
+   - `-s`: the **same full sampleGroups string as the original run** (all
+     groups, not just the two in the new comparison) -- the global QC
+     files (`gene_count_matrix.pdf`, `global_samples_PCA.pdf`,
+     `global_sample_clustering.pdf`, `sessionInfo.txt`) are rewritten
+     unconditionally every run, scoped to whichever samples `-s` lists as
+     active. Narrowing `-s` to only the new comparison's groups would
+     silently make those shared files stop representing the full cohort.
+   - `-c`: **only** the new (or explicitly-to-be-redone) comparison(s) --
+     leaving an already-done one out of `-c` is what skips recomputing it.
+   - If the request needs a genuinely new sample or group not in the
+     original `-s` string, this is bigger than a same-day amendment: that
+     sample needs its own alignment (Steps 4-6) before it has a
+     `gene_abund.tab` to include at all.
+4. Run it the same way as Step 7 (`srun` on a compute node, backgrounded).
+5. Nothing to redo in Step 8 -- the existing `shareResults` symlink already
+   points at the whole `DESeq2_output/` folder, so a new comparison
+   subfolder is automatically visible there too.
+6. Update `run_log.txt` (append, don't overwrite -- keep the original
+   run's record) noting what was added/redone and why, and send a
+   completion email the same way as Step 9.
 
 ## Step 8 -- Share results
 
