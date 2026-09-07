@@ -29,7 +29,15 @@ mapfile -t FILES < <(git ls-files | grep -v '^tools/')
 # itself (real identifiers as literal substitution patterns) -- never let it
 # reach the public branch.
 git rm -r --cached tools >/dev/null
-rm -rf tools
+# This filesystem sometimes reports a just-emptied directory as "not empty"
+# for a moment (a stale directory-entry cache) -- retry rmdir rather than
+# treat it as fatal; an untracked empty tools/ left behind is harmless
+# either way since git never tracks empty directories.
+for i in 1 2 3 4 5; do
+  rm -rf tools 2>/dev/null && break
+  sleep 0.5
+done
+rmdir tools 2>/dev/null || true
 
 git add -A
 git commit -m "Redact real names/identifiers for public release (from master@${MASTER_SHA})"
