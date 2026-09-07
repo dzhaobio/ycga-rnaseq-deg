@@ -6,8 +6,13 @@
 # for why this script itself is fine to leave there.
 #
 # Usage: run from the repo root, on master, with a clean working tree.
-# The public branch is always regenerated from scratch (its history is not
-# meant to be preserved across runs) -- push it with --force.
+# The public branch is always regenerated from scratch as a genuine ORPHAN
+# commit (git checkout --orphan, NOT `checkout -B public master`) -- push it
+# with --force. This matters for real privacy reasons, not just tidiness:
+# `checkout -B public master` makes master's entire commit history (every
+# unredacted past commit) reachable as ancestors of public, which git push
+# would upload right along with the tip -- discovered 2026-09-07 after the
+# repo had already been made public with exactly that mistake in it.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -22,7 +27,8 @@ fi
 
 MASTER_SHA=$(git rev-parse --short master)
 
-git checkout -B public master
+git branch -D public >/dev/null 2>&1 || true
+git checkout --orphan public master
 
 # Redact every tracked file except tools/ itself (while it's still present
 # on disk from the master checkout).
