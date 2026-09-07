@@ -280,6 +280,27 @@ project directory on disk, not in conversation history.
      original `-s` string, this is bigger than a same-day amendment: that
      sample needs its own alignment (Steps 4-6) before it has a
      `gene_abund.tab` to include at all.
+
+   **Excluding an outlier sample:** use `-e`/`--exclude_outliers
+   <sample_name>` (space/comma/slash-separated for multiple). It's
+   evaluated before grouping, so an excluded sample is simply absent from
+   every group in `-s` for this run -- no need to hand-edit the `-s`
+   string to remove it.
+
+   This has a side effect worth knowing about before running it: the
+   shared global QC files (`gene_count_matrix.pdf`, `global_samples_PCA.pdf`,
+   `global_sample_clustering.pdf`, `sessionInfo.txt`) are computed from
+   whatever `-e` leaves behind, and get overwritten every run just like
+   with any other amendment -- so this run will also silently update those
+   already-shared files to reflect the cohort *without* the outlier, not
+   just the new comparison. If that's the intent (the sample really is a
+   confirmed outlier and shouldn't be in the project's QC view going
+   forward), that's fine and arguably correct. If you instead want the new,
+   outlier-excluded comparison without touching anything already shared
+   with the client, run this invocation with a different `-o` (e.g.
+   `-o outlier_check` instead of `-o .`) so it writes to its own directory,
+   then manually copy just the new comparison's subfolder into the
+   project's real `DESeq2_output/` afterward.
 4. Run it the same way as Step 7 (`srun` on a compute node, backgrounded).
 5. Nothing to redo in Step 8 -- the existing `shareResults` symlink already
    points at the whole `DESeq2_output/` folder, so a new comparison
